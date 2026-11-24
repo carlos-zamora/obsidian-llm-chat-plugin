@@ -1,6 +1,6 @@
 # LLM Sessions for Obsidian — Architecture
 
-Status: **v1.0** (2026-11-24) · Proposed design; no code yet.
+Status: **v1.1** (2026-11-24) · Phase 0 spikes done (results in `docs/SPIKES.md`); Phase 1 implemented.
 
 ---
 
@@ -30,7 +30,7 @@ Embed **collapsible LLM chat sessions** in Obsidian notes so the user can think 
 
 - `@anthropic-ai/claude-agent-sdk` drives the **Claude Code CLI as a subprocess**. Obsidian desktop exposes Node APIs (`child_process`, `fs`) to plugins, so this works on desktop only. The manifest sets `isDesktopOnly: true`.
 - The SDK normally ships a platform-specific native binary as an optional npm dependency. An Obsidian plugin can release only `main.js`, `manifest.json`, and `styles.css`, so we **cannot ship that binary**. Instead we point the SDK at the user's installed Claude Code with `pathToClaudeCodeExecutable`. This is also what makes subscription use legitimate (§2.2).
-- The SDK's JavaScript is bundled into `main.js` by esbuild. *Spike:* confirm it bundles cleanly (Node built-ins external, no dynamic `require` of the binary package at load time).
+- The SDK's JavaScript is bundled into `main.js` by esbuild, with Node built-ins external. *Spike result:* it bundles cleanly and never requires the binary package at load time. It does call `createRequire(import.meta.url)` when it loads, so esbuild defines `import.meta.url` as a real file URL.
 
 ### 2.2 Using a Claude Pro subscription
 
@@ -157,7 +157,7 @@ Settings later shows connection status and a **Test connection** button.
 
 A right-sidebar `ItemView` bound to one chat:
 
-- **Header:** title, a **model picker** (shows *Sonnet · default* or the per-chat override, with effort; §7.3), billing mode, and **context chips** (host note always pinned; extra notes can be added or removed).
+- **Header:** title; labeled **Model** and **Effort** pickers (§7.3); a line saying how the chat is billed; and a labeled **Context** row of chips. The host note is always pinned. Other notes and files can be added and removed: **+** offers the active note, any vault file, or a file from the computer, and dropping files on the panel adds them too. A file from outside the vault is first copied into the attachment folder, because the agent only reads vault files.
 - **Messages:** rendered markdown, streamed live. Tool activity is shown compactly (*Read "Sleep"*, *Searched notes for "HRV"*, *Read chat "Oura setup"*). The injected context blocks are collapsed into one line.
 - **Per-message actions:** **Embed in note**, **Copy**, **Branch from here** (Phase 3, via `forkSession(upToMessageId)`).
 - **Composer:** Send / **Stop** (interrupts the running query).
@@ -287,10 +287,12 @@ One `ClaudeAgentRuntime` wraps `query()`. Per chat:
 | `canUseTool` | Obsidian modal for anything not auto-approved | Note editing (Phase 3) asks for approval with a diff |
 | `permissionMode` | `default` (never bypass) | Safety |
 | `settingSources` | `[]` by default | Keeps the user's coding hooks, MCP servers, and `CLAUDE.md` out of note chats; a setting can enable the vault's project settings |
+| `strictMcpConfig` + `settings: { disableClaudeAiConnectors: true }` | always | *Spike finding:* `settingSources: []` alone still attaches the user's claude.ai connectors (Gmail, Outlook…) from the second turn |
+| `verbatimPrompts` | `true` | Note text in user turns must not trigger `@path` expansion or slash commands |
 | `agents` | `{ 'chat-historian': … }` | Retrieval subagent (§8.3) |
 | `includePartialMessages` | `true` | Live streaming in the panel |
 | `model` / `effort` | chat override, else settings (default `sonnet`, effort `medium`) | §7.3 |
-| `maxTurns` | 15 | Caps runaway tool loops |
+| `maxTurns` | 15 | Caps runaway tool loops (per user message in streaming input mode, confirmed by spike) |
 | `maxBudgetUsd` | setting (API-key mode only) | Cost guard |
 | `abortController` | per query | Stop button, plugin unload |
 
@@ -343,6 +345,7 @@ Model choice works at two levels:
    - The chat's own callouts are removed from the note to avoid recursion. **Other** chats' callouts stay, since their summaries are useful context.
    - Context goes **in the user turn, not the system prompt**, so it is **saved in the session**. When the chat is resumed in the Claude Code terminal, it still knows the note.
 3. **Linked notes:** off by default. The agent can fetch them with `read_note` and `get_links` when relevant, which beats pre-loading them.
+4. **Context files** the user added go in the same way as host notes. Notes and text files are text blocks. Images (PNG, JPEG, GIF, WebP; up to 5 MB) and PDFs (up to 20 MB) are attached as image and document content blocks in the user turn, with an `<attachment path="…" />` marker in the text. They are re-sent only when their modified time or size changes.
 
 ### 8.2 Keeping the note current
 
@@ -363,29 +366,33 @@ When a chat is opened from a different note (`open-chat-panel` or `open-chat`), 
 
 ## 9. Summaries
 
-**Approach: forked, unsaved, one-shot query.** It is not a subagent.
+**Approach: one-shot, unsaved query over the visible conversation.** It is not a subagent, and it does not resume or fork the session.
 
 ```ts
 query({
-  prompt: SUMMARY_PROMPT,            // "Summarize this conversation's decisions and conclusions…"
+  prompt: summaryPrompt(conversationForSummary(turns)),  // "User: … / Assistant: …", note blocks removed
   options: {
-    resume: chat.sessionId,
-    forkSession: true,               // never touches the real session
-    persistSession: false,           // leaves no extra session file behind
-    tools: [], maxTurns: 1,
-    outputFormat: { type: 'json_schema', schema: SummarySchema },   // { title?, summary }
+    persistSession: false,           // leaves no session file behind
+    tools: [], maxTurns: 3,          // structured output can take an extra turn
+    outputFormat: { type: 'json_schema', schema: SummarySchema },   // { title?, summary? }
     model: settings.summaryModel,    // default 'haiku'
     effort: 'low',
-    // same cwd, executable, and env as the chat
+    // same executable and env as the chat (baseOptions)
   },
 });
 ```
 
-**Why not a subagent?** A subagent runs **inside** the main session. Its call and result would be written into the transcript the user reads, and continued in Claude Code, on every update. The fork sees the full conversation, changes nothing, and returns validated JSON. Because it runs on Haiku rather than the chat's model, it can't reuse the chat's prompt cache (caches are per model), but Haiku's low price more than makes up for that. *Spike:* confirm `forkSession` + `persistSession: false` + `outputFormat` work together. Fallback: an unsaved one-shot query over the transcript text from `getSessionMessages`.
+**Why not fork the session?** The first design resumed the session as an unsaved fork (`forkSession` + `persistSession: false` + `outputFormat`; the spike showed this works). In use, the summaries described the **note**: the session's first user turn carries the note in an `<obsidian-context>` block, so the fork saw it as part of "the conversation." The summary now comes from the turns returned by `getSessionMessages`, with every `<obsidian-context>`, `<note>` and `<note-update>` block removed and tool activity left out (`core/summary-input.ts`). The model never sees the note. It also sends far fewer tokens than resuming the whole session. Long chats keep their newest messages (about 40k characters).
 
-- **Chat summary:** the title is generated once, after the first reply (unless the user set one). The summary is 1–3 sentences focused on **decisions and open questions**.
-- **Response summary:** when a response is embedded, the same fork approach is asked for `{ subtitle, summary }` of that message.
+**Why not a subagent?** A subagent runs **inside** the main session. Its call and result would be written into the transcript the user reads, and continued in Claude Code, on every update.
+
+- **Chat summary:** the title is generated once, after the first reply (unless the user set one). The summary is at most 2 sentences, and always shorter than the conversation. It mentions decisions or open questions only when there are some.
+- **Short chats:** when a chat is a single exchange and the reply is short (up to 400 characters and 8 lines), the callout shows the reply itself instead of a summary, because any summary would be longer than the chat. The title is still generated.
+- **AI label:** rendered chat callouts and the chat panel show "can contain mistakes" labels. The plugin draws them; they are not written into the note.
+- **Summary version:** `SUMMARY_VERSION` in `chat-service.ts` is part of the "changed since last summary" key. A summary whose key no longer matches (the chat changed, or `SUMMARY_VERSION` was bumped) is rewritten when the user sees it: when its callout is drawn in a note or the chat opens in the panel. Refreshes run one at a time and each chat state is tried once per session, so a failing summary cannot retry on every redraw.
+- **Response summary:** when a response is embedded, the same approach is asked for `{ subtitle, summary }` of that message.
 - **When:** **when idle**: 2 minutes after the last reply, or when the panel closes, whichever comes first. A summary runs only if the chat changed since the last one. This keeps summary calls to about one per working session instead of one per reply, which matters because they use the same subscription limits as chatting.
+- **Inserting a callout:** a new callout always gets a blank line before and after it, and the cursor moves to a line below that blank line (`embed/callout-insert.ts`). In Markdown, a line typed directly under a quote block continues the quote, so without the blank line the user's next words would join the callout.
 - **Applying:** `embed-updater` rewrites matching callouts in every note listed in `hostNotes` with `vault.process`, touching only callouts whose metadata matches the chat. A callout it cannot parse is left alone and marked stale.
 - There is no manual refresh command, by design.
 

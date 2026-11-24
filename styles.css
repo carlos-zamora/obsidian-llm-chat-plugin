@@ -1,8 +1,344 @@
-/*
+/* LLM Sessions */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+/* Callouts */
+.callout[data-callout='llm-chat'],
+.callout[data-callout='llm-response'] {
+	--callout-color: var(--color-purple-rgb);
+	--callout-icon: lucide-messages-square;
+}
 
-If your plugin does not need CSS, delete this file.
+.llm-callout-actions {
+	display: inline-flex;
+	gap: var(--size-2-1);
+	margin-left: auto;
+}
 
-*/
+.llm-callout-action {
+	padding: var(--size-2-1);
+}
+
+.llm-callout-state {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	margin-left: var(--size-4-2);
+}
+
+.llm-callout-state.is-missing {
+	color: var(--text-error);
+}
+
+/* Panel */
+.llm-chat-view {
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+}
+
+.llm-chat-header {
+	padding: var(--size-4-2) var(--size-4-3);
+	border-bottom: 1px solid var(--background-modifier-border);
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-2);
+}
+
+.llm-chat-header:empty {
+	display: none;
+}
+
+.llm-chat-title {
+	font-weight: var(--font-semibold);
+	font-size: var(--font-ui-medium);
+	cursor: pointer;
+}
+
+.llm-chat-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: var(--size-4-2) var(--size-4-3);
+}
+
+.llm-field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-2-1);
+}
+
+.llm-field-label {
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-semibold);
+	color: var(--text-muted);
+}
+
+.llm-chat-meta .dropdown {
+	font-size: var(--font-ui-smaller);
+	max-width: 14em;
+}
+
+/* Billing is a statement about the chat, set apart from the labeled fields. */
+.llm-chat-billing {
+	flex-basis: 100%;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.llm-chat-context {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--size-4-1) var(--size-4-2);
+}
+
+.llm-chat-chips {
+	display: contents;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.llm-chip {
+	display: inline-flex;
+	align-items: center;
+	border-radius: var(--radius-l);
+	background: var(--background-modifier-hover);
+	font-size: var(--font-ui-smaller);
+}
+
+.llm-chip.is-pinned {
+	background: var(--background-modifier-active-hover);
+}
+
+.llm-chip-open {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--size-2-2);
+	height: auto;
+	padding: var(--size-2-1) var(--size-4-2);
+	background: none;
+	box-shadow: none;
+	font-size: inherit;
+	color: var(--text-normal);
+	cursor: pointer;
+}
+
+.llm-chip-remove {
+	padding: var(--size-2-1);
+	margin-right: var(--size-2-1);
+}
+
+.llm-chip-icon {
+	display: inline-flex;
+}
+
+.llm-chip-icon svg,
+.llm-chip-remove svg {
+	width: 12px;
+	height: 12px;
+}
+
+/* Dropping notes or files on the panel. */
+.llm-drop-hint {
+	display: none;
+}
+
+.llm-chat-view.is-drop-target {
+	position: relative;
+	outline: 2px dashed var(--interactive-accent);
+	outline-offset: -4px;
+}
+
+.llm-chat-view.is-drop-target .llm-drop-hint {
+	display: flex;
+	position: absolute;
+	inset: 0;
+	align-items: center;
+	justify-content: center;
+	background: hsla(var(--interactive-accent-hsl), 0.08);
+	color: var(--text-accent);
+	font-weight: var(--font-semibold);
+	pointer-events: none;
+}
+
+.llm-chat-banner:empty {
+	display: none;
+}
+
+.llm-banner-row {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--size-4-2);
+	padding: var(--size-4-2) var(--size-4-3);
+	background: var(--background-secondary);
+	border-bottom: 1px solid var(--background-modifier-border);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.llm-chat-messages {
+	flex: 1;
+	overflow-y: auto;
+	padding: var(--size-4-3);
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-3);
+	user-select: text;
+}
+
+.llm-message {
+	position: relative;
+	padding: var(--size-4-2) var(--size-4-3);
+	border-radius: var(--radius-m);
+}
+
+.llm-message-user {
+	background: var(--background-secondary);
+}
+
+.llm-message.is-highlighted {
+	outline: 2px solid var(--interactive-accent);
+}
+
+.llm-message-role {
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-semibold);
+	color: var(--text-muted);
+	margin-bottom: var(--size-2-2);
+}
+
+.llm-message-body > :first-child {
+	margin-top: 0;
+}
+
+.llm-message-body > :last-child {
+	margin-bottom: 0;
+}
+
+.llm-message-copy {
+	position: absolute;
+	top: var(--size-2-2);
+	right: var(--size-2-2);
+	opacity: 0;
+}
+
+.llm-message:hover .llm-message-copy {
+	opacity: 1;
+}
+
+.llm-tools:empty {
+	display: none;
+}
+
+.llm-tool {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-3);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.llm-tool-icon svg {
+	width: 12px;
+	height: 12px;
+}
+
+.llm-typing {
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+.llm-error {
+	color: var(--text-error);
+	font-size: var(--font-ui-small);
+	margin-top: var(--size-2-3);
+	white-space: pre-wrap;
+}
+
+.llm-chat-hint,
+.llm-chat-empty {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	text-align: center;
+	margin: auto 0;
+}
+
+.llm-chat-composer {
+	display: flex;
+	gap: var(--size-4-2);
+	align-items: flex-end;
+	padding: var(--size-4-2) var(--size-4-3);
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.llm-chat-input {
+	flex: 1;
+	resize: vertical;
+	min-height: 3.5em;
+	max-height: 40vh;
+}
+
+/* Picker */
+.llm-picker-title {
+	display: flex;
+	gap: var(--size-4-2);
+	align-items: center;
+}
+
+.llm-picker-badge {
+	font-size: var(--font-ui-smaller);
+	padding: 0 var(--size-4-1);
+	border-radius: var(--radius-s);
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+}
+
+.llm-picker-badge.mod-warning {
+	color: var(--text-error);
+}
+
+.llm-picker-summary,
+.llm-picker-meta {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+/* Onboarding and settings */
+.llm-onboarding .llm-disclosure li {
+	margin-bottom: var(--size-2-3);
+}
+
+.llm-status {
+	margin: var(--size-4-2) 0;
+	font-size: var(--font-ui-small);
+}
+
+.llm-ok {
+	color: var(--text-success);
+}
+
+.llm-bad {
+	color: var(--text-error);
+	white-space: pre-wrap;
+}
+
+.llm-onboarding-nav {
+	border-top: none;
+}
+
+.llm-wide-input {
+	width: 100%;
+}
+
+/* "AI can make mistakes" labels (panel and callouts) */
+.llm-ai-disclaimer {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	text-align: center;
+	padding: 0 var(--size-4-3) var(--size-4-2);
+}
+
+.callout .llm-ai-disclaimer {
+	text-align: left;
+	padding: var(--size-2-2) 0 0;
+}
